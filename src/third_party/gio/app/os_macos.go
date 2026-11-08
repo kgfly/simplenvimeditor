@@ -379,6 +379,8 @@ type window struct {
 type cmdKeys struct {
 	eventStr  string
 	eventMods key.Modifiers
+	// pending is true until doCommandBySelector consumes the event.
+	pending bool
 }
 
 // launched is closed when applicationDidFinishLaunching is called.
@@ -589,11 +591,13 @@ func gio_onKeys(h C.uintptr_t, event C.CFTypeRef, cstr C.CFTypeRef, ti C.double,
 	str := nsstringToString(cstr)
 	kmods := convertMods(mods)
 	ks := key.Release
+	unclaimed := false
 	if keyDown {
 		ks = key.Press
-		w.cmdKeys.eventStr = str
-		w.cmdKeys.eventMods = kmods
+		w.cmdKeys = cmdKeys{eventStr: str, eventMods: kmods, pending: true}
 		C.interpretKeyEvents(w.view, event)
+		unclaimed = w.cmdKeys.pending
+		w.cmdKeys = cmdKeys{}
 	}
 	for _, k := range str {
 		if n, ok := convertKey(k); ok {
@@ -605,8 +609,12 @@ func gio_onKeys(h C.uintptr_t, event C.CFTypeRef, cstr C.CFTypeRef, ti C.double,
 			if keyDown {
 				w.keysDown[ke.Name] = struct{}{}
 				if _, isCmd := convertCommandKey(k); isCmd || kmods.Contain(key.ModCommand) {
-					// doCommandBySelector already processed the event.
-					return
+					// doCommandBySelector already processed the event, unless
+					// AppKit composed text instead (Cmd+Option+1 -> "¡"), in
+					// which case the Cmd chord would otherwise be lost.
+					if !unclaimed || !kmods.Contain(key.ModCommand) {
+						return
+					}
 				}
 			} else {
 				if _, pressed := w.keysDown[n]; !pressed {

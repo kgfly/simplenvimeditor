@@ -1,4 +1,4 @@
-# SimpleNvimEditor
+# Simple Nvim Editor
 
 A simple, fast, native Neovim GUI written in [Go](https://go.dev/), using the
 [Gio](https://gioui.org) UI toolkit with a minimalist design.
