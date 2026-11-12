@@ -9,19 +9,29 @@
 
 #import <Cocoa/Cocoa.h>
 
+// Pending critical request; only touched on the main thread.
+static NSInteger snv_attention_request = 0;
+
 void snv_request_attention(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([NSApp isActive]) {
             return;
         }
-        // One bounce, plus a badge that stays until the window is focused.
-        [NSApp requestUserAttention:NSInformationalRequest];
+        // Bounce and badge until the app is activated (switched to).
+        if (snv_attention_request != 0) {
+            [NSApp cancelUserAttentionRequest:snv_attention_request];
+        }
+        snv_attention_request = [NSApp requestUserAttention:NSCriticalRequest];
         [[NSApp dockTile] setBadgeLabel:@"\u25CF"];
     });
 }
 
 void snv_clear_attention(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (snv_attention_request != 0) {
+            [NSApp cancelUserAttentionRequest:snv_attention_request];
+            snv_attention_request = 0;
+        }
         [[NSApp dockTile] setBadgeLabel:nil];
     });
 }

@@ -195,7 +195,7 @@ is `false`.
 
 | OS | What happens | When it stops |
 |---|---|---|
-| macOS | The Dock icon bounces once and shows a `●` badge | The badge clears when you switch to the window |
+| macOS | The Dock icon keeps bouncing and shows a `●` badge | Both stop when you switch to the window |
 | Windows | The taskbar button flashes, then stays highlighted | When the window comes to the foreground |
 | Linux (X11) | The window is marked urgent (taskbar or dock highlight, depending on the desktop) | When you focus the window |
 | Linux (Wayland) | An xdg-activation request; most compositors highlight the window | Compositor-defined, usually when you focus it |
