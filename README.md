@@ -25,8 +25,10 @@ features.
   (macOS) or Ctrl-click (Linux and Windows) visible HTTP and HTTPS links to
   open them in your browser.
 - **Simple configuration.** An optional `config.toml` lets you choose your font
-  and Neovim launch settings, and turn on an optional per-window
-  [scrollbar](#scrollbar).
+  and Neovim launch settings, turn on an optional per-window
+  [scrollbar](#scrollbar), or have the Dock or taskbar icon
+  [ask for attention](#attention_on_bell) when an AI agent in a terminal
+  finishes.
 - **More ways to work.** Run a terminal with
   `simplenvim --maximized -- -c term -c startinsert`, or use Neovim's diff mode
   as a GUI diff tool.
@@ -133,6 +135,7 @@ alt_is_meta = true         # send Alt/Option chords to Nvim as <A-...>
 title_prefix = false       # prefix the window title with color + number, e.g. "re1 "
 scrollbar = false          # per-window scrollbar: click to jump, drag to scroll
 scrollbar_width = 0        # scrollbar width in points; 0 = automatic
+attention_on_bell = false  # bounce/flash the Dock/taskbar icon on a bell while unfocused
 
 [nvim]
 command = "nvim"           # path or PATH-resolved name
@@ -180,6 +183,103 @@ character cell, so larger values are capped. When it's left out or set
 to `0`, the bar is two thirds of a cell wide and follows the font size.
 With the default font at size 14 that's 5 px on a standard display and
 11 px on a Retina one.
+
+### `attention_on_bell`
+
+Set `attention_on_bell = true` to have the window ask for attention when
+Neovim rings the bell while the window isn't focused. The typical use is
+an AI coding agent (Copilot CLI, Claude Code, and similar) running in a
+`:terminal`: when the agent finishes a task it rings the terminal bell
+(`\a`), and you see it even if you're working in another app. The default
+is `false`.
+
+| OS | What happens | When it stops |
+|---|---|---|
+| macOS | The Dock icon bounces once and shows a `●` badge | The badge clears when you switch to the window |
+| Windows | The taskbar button flashes, then stays highlighted | When the window comes to the foreground |
+| Linux (X11) | The window is marked urgent (taskbar or dock highlight, depending on the desktop) | When you focus the window |
+| Linux (Wayland) | An xdg-activation request; most compositors highlight the window | Compositor-defined, usually when you focus it |
+
+Nothing happens while the window is focused, since you can already see it.
+
+**Neovim must pass terminal bells through.** Neovim's default is
+`belloff=all`, which drops every bell. Remove `term` from it, for
+example in `init.lua`:
+
+```lua
+vim.opt.belloff = "backspace,cursor,complete,copy,ctrlg,error,esc,ex,hangul,lang,mess,showmatch,operator,register,shell,spell,wildmode"
+```
+
+Any non-terminal bell that `belloff` lets through (for example `error`)
+also triggers attention.
+
+**The program in the terminal must ring the bell.** AI agent CLIs
+usually need a hook that runs when a task ends. The hook can't just
+print `\a`, because the CLI captures its standard output, and some CLIs
+run hooks without a controlling terminal, so `/dev/tty` isn't always
+available either. A small script that writes the bell to the terminal
+of the nearest process that has one works with all of them
+(macOS and Linux):
+
+```sh
+#!/bin/sh
+# ~/bin/agent-bell: ring the bell of the terminal the agent runs in
+printf '\a' 2>/dev/null > /dev/tty && exit 0
+p=$PPID
+while [ "${p:-1}" -gt 1 ]; do
+  t=$(ps -o tty= -p "$p" | tr -d ' ')
+  case $t in
+    ''|'?'|'??') p=$(ps -o ppid= -p "$p" | tr -d ' ') ;;
+    *) printf '\a' > "/dev/$t"; break ;;
+  esac
+done
+exit 0
+```
+
+On Windows there is no `/dev/tty`, and Node-based CLIs run hooks in a
+hidden console. The script there has to find the nearest ancestor
+process whose console has a window, which is the ConPTY Neovim
+created for the terminal. It attaches to that console with
+`AttachConsole` and writes `\a` to `CONOUT$`. ConPTY then forwards the
+bell to Neovim.
+
+Always exit 0: some CLIs treat a failing stop hook as "keep working".
+Then call it when a task finishes:
+
+- GitHub Copilot CLI: add a user hook file such as
+  `~/.copilot/hooks/agent-bell.json`. `agentStop` fires when the agent
+  finishes a turn, and the `notification` entry also rings when it waits
+  for a permission answer. On Windows, Copilot runs the `powershell`
+  field of each entry instead of `bash`:
+
+  ```json
+  {
+    "version": 1,
+    "hooks": {
+      "agentStop": [ { "type": "command", "bash": "~/bin/agent-bell" } ],
+      "notification": [ { "type": "command", "matcher": "permission_prompt|elicitation_dialog", "bash": "~/bin/agent-bell" } ]
+    }
+  }
+  ```
+
+- Claude Code and tools with Claude-style hooks: add a `Stop` hook, for
+  example in `~/.claude/settings.json`. On Windows these run in Git Bash,
+  or in PowerShell if Git Bash isn't installed:
+
+  ```json
+  {
+    "hooks": {
+      "Stop": [
+        { "matcher": "*", "hooks": [ { "type": "command", "command": "~/bin/agent-bell" } ] }
+      ]
+    }
+  }
+  ```
+
+A bell also works through tmux (with tmux's default `bell-action any`
+and `visual-bell off`) and over ssh, because it travels in the terminal
+output itself. For example, nvim `:terminal` → ssh → tmux → agent still
+reaches the window.
 
 ## Command-line arguments
 
