@@ -654,6 +654,9 @@ func (a *App) startNvim() {
 	a.installSlotCmd()
 	a.installRowViews()
 	go a.pumpRedraw()
+	if a.attention.enabled {
+		go a.flushBells()
+	}
 }
 
 // pumpRedraw applies every `redraw` batch Nvim sends to the state model and

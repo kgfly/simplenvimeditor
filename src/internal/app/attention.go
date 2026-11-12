@@ -2,6 +2,7 @@ package editorapp
 
 import (
 	"sync"
+	"time"
 
 	gioapp "gioui.org/app"
 )
@@ -57,8 +58,38 @@ func (t *attention) bell() {
 	attentionRequest(t.view)
 }
 
+// armed reports whether a bell arriving now would request attention.
+func (t *attention) armed() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.enabled && !t.focused && t.valid && !t.raised
+}
+
 // The platform hooks, as variables so tests can observe them.
 var (
 	attentionRequest = requestAttention
 	attentionClear   = clearAttention
 )
+
+// bellFlushInterval is how often flushBells asks Nvim for held-back events.
+const bellFlushInterval = 500 * time.Millisecond
+
+// flushBells delivers bells Nvim would otherwise sit on. Nvim queues a
+// :terminal bell with the other UI events and only sends it on the next
+// screen update, so a lone `\a` from an agent's stop hook can wait until
+// the user comes back, which defeats the point. While a bell would raise
+// attention, Nvim is asked to flush every bellFlushInterval.
+func (a *App) flushBells() {
+	tick := time.NewTicker(bellFlushInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-a.proc.Exited:
+			return
+		case <-tick.C:
+			if a.attention.armed() {
+				a.proc.FlushUI()
+			}
+		}
+	}
+}

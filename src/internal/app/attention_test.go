@@ -39,6 +39,31 @@ func TestAttentionOnlyWhenEnabledAndUnfocused(t *testing.T) {
 	}
 }
 
+func TestAttentionArmedOnlyWhileABellWouldRaise(t *testing.T) {
+	recordAttention(t)
+	if (&attention{valid: true}).armed() {
+		t.Fatal("armed while disabled")
+	}
+	a := attention{enabled: true, valid: true}
+	a.setFocused(true)
+	if a.armed() {
+		t.Fatal("armed while focused")
+	}
+	a.setFocused(false)
+	if !a.armed() {
+		t.Fatal("not armed while unfocused")
+	}
+	a.bell()
+	if a.armed() {
+		t.Fatal("armed while attention is already raised")
+	}
+	a.setFocused(true)
+	a.setFocused(false)
+	if !a.armed() {
+		t.Fatal("not armed after focus cleared the request")
+	}
+}
+
 func TestAttentionNeedsAValidView(t *testing.T) {
 	requests, _ := recordAttention(t)
 	a := attention{enabled: true}

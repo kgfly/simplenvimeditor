@@ -295,6 +295,17 @@ func (p *Process) ExecLua(code string) {
 	p.slow.push(func() { _ = p.Nvim.ExecLua(code, nil, p.Nvim.ChannelID()) })
 }
 
+// FlushUI makes Nvim send the UI events it is holding back. A bell rung by
+// a :terminal job with no other output (an agent's stop hook printing
+// `\a`) is buffered until the next screen update, which may never come
+// while the user is away. Replying to any request flushes that buffer
+// first, and nvim_get_mode is a "fast" request Nvim answers immediately,
+// even at a prompt, without touching input or redrawing. It blocks until
+// Nvim replies, so callers own the goroutine it runs on.
+func (p *Process) FlushUI() {
+	_, _ = p.Nvim.Mode()
+}
+
 // vimEscape quotes path for use inside a Vim command line by deferring to
 // Nvim's own fnameescape() at evaluation time.
 func vimEscape(path string) string {
