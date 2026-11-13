@@ -407,7 +407,7 @@ func TestRepeatedQuitSparesSaveChangesPrompt(t *testing.T) {
 
 // TestTerminalBellReachesUIState checks a BEL printed in a :terminal buffer
 // arrives as a bell event once 'belloff' lets terminal bells through, and
-// not while it is "all", Nvim's default. nvim_open_term feeds the terminal
+// not while it is "all", Nvim's default (Nvim 0.11+ only). nvim_open_term feeds the terminal
 // directly, so no shell is involved and this runs the same on every OS.
 func TestTerminalBellReachesUIState(t *testing.T) {
 	dir := t.TempDir()
@@ -433,8 +433,15 @@ vim.api.nvim_chan_send(vim.api.nvim_open_term(b, {}), "\a" .. ...)`
 		waitForLine(t, proc, s, marker)
 	}
 
+	// Before Nvim 0.11 terminal bells bypassed 'belloff' entirely (Ubuntu's
+	// apt package is still 0.9), so only newer versions can be silenced.
+	var version int
+	if err := proc.Nvim.ExecLua("local v = vim.version() return v.major * 100 + v.minor", &version); err != nil {
+		t.Fatalf("vim.version: %v", err)
+	}
+
 	ring("all", "silenced")
-	if s.TakeBell() {
+	if s.TakeBell() && version >= 11 {
 		t.Fatal("bell reached the UI with belloff=all")
 	}
 	ring("error", "rang")

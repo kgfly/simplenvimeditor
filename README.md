@@ -15,6 +15,13 @@ features.
 - **Easy-to-find windows.** An innotative, color-grouped, numbered Dock and taskbar icons help
   you pick out the right instance when you have many editors open. See
   [Dock and taskbar icon color](#dock-and-taskbar-icon-color).
+- **Know when your AI agent is done.** Run Copilot CLI, Claude Code, or
+  another agent in a `:terminal` and switch to other work. When the agent
+  finishes or needs an answer, the Dock icon keeps bouncing with a badge
+  (macOS), the taskbar button flashes (Windows), or the window is marked
+  urgent (Linux) until you come back. This works through tmux and ssh too, and
+  the included [agent-bell.py](tools/agent-bell/agent-bell.py) hook script
+  works on all three OSes. See [Agent bell setup](docs/agent-bell-setup.md).
 - **Native, cross-platform rendering.** Gio draws the window on macOS, Linux,
   and Windows with GPU acceleration and Nerd Font support.
 - **Accurate editor layout.** Multigrid rendering places splits and floating
@@ -25,10 +32,8 @@ features.
   (macOS) or Ctrl-click (Linux and Windows) visible HTTP and HTTPS links to
   open them in your browser.
 - **Simple configuration.** An optional `config.toml` lets you choose your font
-  and Neovim launch settings, turn on an optional per-window
-  [scrollbar](#scrollbar), or have the Dock or taskbar icon
-  [ask for attention](#attention_on_bell) when an AI agent in a terminal
-  finishes.
+  and Neovim launch settings, or turn on an optional per-window
+  [scrollbar](#scrollbar).
 - **More ways to work.** Run a terminal with
   `simplenvim --maximized -- -c term -c startinsert`, or use Neovim's diff mode
   as a GUI diff tool.
@@ -211,75 +216,17 @@ vim.opt.belloff = "backspace,cursor,complete,copy,ctrlg,error,esc,ex,hangul,lang
 ```
 
 Any non-terminal bell that `belloff` lets through (for example `error`)
-also triggers attention.
+also triggers attention. Neovim older than 0.11 ignores `belloff` for
+terminal bells and always passes them through.
 
-**The program in the terminal must ring the bell.** AI agent CLIs
-usually need a hook that runs when a task ends. The hook can't just
-print `\a`, because the CLI captures its standard output, and some CLIs
-run hooks without a controlling terminal, so `/dev/tty` isn't always
-available either. A small script that writes the bell to the terminal
-of the nearest process that has one works with all of them
-(macOS and Linux):
-
-```sh
-#!/bin/sh
-# ~/bin/agent-bell: ring the bell of the terminal the agent runs in
-printf '\a' 2>/dev/null > /dev/tty && exit 0
-p=$PPID
-while [ "${p:-1}" -gt 1 ]; do
-  t=$(ps -o tty= -p "$p" | tr -d ' ')
-  case $t in
-    ''|'?'|'??') p=$(ps -o ppid= -p "$p" | tr -d ' ') ;;
-    *) printf '\a' > "/dev/$t"; break ;;
-  esac
-done
-exit 0
-```
-
-On Windows there is no `/dev/tty`, and Node-based CLIs run hooks in a
-hidden console. The script there has to find the nearest ancestor
-process whose console has a window, which is the ConPTY Neovim
-created for the terminal. It attaches to that console with
-`AttachConsole` and writes `\a` to `CONOUT$`. ConPTY then forwards the
-bell to Neovim.
-
-Always exit 0: some CLIs treat a failing stop hook as "keep working".
-Then call it when a task finishes:
-
-- GitHub Copilot CLI: add a user hook file such as
-  `~/.copilot/hooks/agent-bell.json`. `agentStop` fires when the agent
-  finishes a turn, and the `notification` entry also rings when it waits
-  for a permission answer. On Windows, Copilot runs the `powershell`
-  field of each entry instead of `bash`:
-
-  ```json
-  {
-    "version": 1,
-    "hooks": {
-      "agentStop": [ { "type": "command", "bash": "~/bin/agent-bell" } ],
-      "notification": [ { "type": "command", "matcher": "permission_prompt|elicitation_dialog", "bash": "~/bin/agent-bell" } ]
-    }
-  }
-  ```
-
-- Claude Code and tools with Claude-style hooks: add a `Stop` hook, for
-  example in `~/.claude/settings.json`. On Windows these run in Git Bash,
-  or in PowerShell if Git Bash isn't installed:
-
-  ```json
-  {
-    "hooks": {
-      "Stop": [
-        { "matcher": "*", "hooks": [ { "type": "command", "command": "~/bin/agent-bell" } ] }
-      ]
-    }
-  }
-  ```
-
-A bell also works through tmux (with tmux's default `bell-action any`
-and `visual-bell off`) and over ssh, because it travels in the terminal
-output itself. For example, nvim `:terminal` → ssh → tmux → agent still
-reaches the window.
+**The program in the terminal must ring the bell.** AI agent CLIs need
+a task-done hook for that. [agent-bell.py](tools/agent-bell/agent-bell.py)
+is a hook script that rings the agent's terminal bell on macOS, Linux,
+and Windows. It also works through tmux and ssh. See
+[Agent bell setup](docs/agent-bell-setup.md) for the full guide:
+installing the script, hooks for Copilot CLI, Claude Code, code-puppy,
+and OpenAI Codex, tmux and ssh, optionally flashing the Neovim tab and tmux
+window that hold the agent, and troubleshooting.
 
 ## Command-line arguments
 

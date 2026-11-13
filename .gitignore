@@ -28,8 +28,8 @@ go.work.sum
 .env
 
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
 
 # Temp / swap / backup / OS junk files
 *.tmp
@@ -39,6 +39,7 @@ go.work.sum
 *~
 .DS_Store
 *.log
+*.pyc
 
 # Locally built binary (go build -o simplenvim ./cmd/simplenvim)
 /src/simplenvim
@@ -47,8 +48,6 @@ go.work.sum
 # scripts/run-macos.sh and packaging/macos/make-dmg.sh.
 /build/
 /dist/
-**/.vscode
 
 # Test orchestration state
-.wibey-test/
 .cache/
