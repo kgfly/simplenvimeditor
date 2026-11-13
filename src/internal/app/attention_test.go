@@ -1,9 +1,15 @@
 package editorapp
 
 import (
+	"os/exec"
+	"runtime"
 	"testing"
+	"time"
 
 	gioapp "gioui.org/app"
+
+	"github.com/kgfly/SimpleNvimEditor/internal/nvimproc"
+	"github.com/kgfly/SimpleNvimEditor/internal/uistate"
 )
 
 // recordAttention swaps the platform hooks for counters.
@@ -89,5 +95,51 @@ func TestAttentionClearedOnceOnFocus(t *testing.T) {
 	a.setFocused(true)
 	if *requests != 2 || *clears != 1 {
 		t.Fatalf("requests, clears = %d, %d; want 2, 1", *requests, *clears)
+	}
+}
+
+// TestFlushBellsDeliversAHeldTerminalBell rings a bell from a :terminal job
+// that prints nothing else. Nvim holds such a bell until its next screen
+// update, so without flushBells it never reaches the state while idle.
+func TestFlushBellsDeliversAHeldTerminalBell(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the terminal job needs sh")
+	}
+	path, err := exec.LookPath("nvim")
+	if err != nil {
+		t.Skip("nvim not found on PATH")
+	}
+	proc, err := nvimproc.Spawn(path, []string{"-u", "NONE", "-n", "--cmd", "set belloff="}, nil, 80, 24)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recordAttention(t)
+	a := &App{proc: proc, state: uistate.New(), attention: attention{enabled: true, valid: true}}
+	done := make(chan struct{})
+	go func() {
+		a.flushBells()
+		close(done)
+	}()
+
+	if err := proc.Nvim.Command(`enew | call termopen(['sh', '-c', 'sleep 0.5; printf "\a"; sleep 30'])`); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(5 * time.Second)
+	for rang := false; !rang; {
+		select {
+		case batch := <-proc.Redraw:
+			a.state.Apply(batch)
+			rang = a.state.TakeBell()
+		case <-deadline:
+			t.Fatal("held terminal bell never reached the UI")
+		}
+	}
+
+	_ = proc.Nvim.Close()
+	<-proc.Exited
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("flushBells kept running after Nvim exited")
 	}
 }
