@@ -338,6 +338,39 @@ func TestScrollbarConfig(t *testing.T) {
 	}
 }
 
+// TestAttentionOnBellConfig checks attention_on_bell is off unless asked for.
+func TestAttentionOnBellConfig(t *testing.T) {
+	if config.Default().Editor.AttentionOnBell {
+		t.Fatal("attention_on_bell should be off by default")
+	}
+	for _, tc := range []struct {
+		toml string
+		want bool
+	}{
+		{"[editor]\n", false},
+		{"[editor]\nattention_on_bell = true\n", true},
+	} {
+		withIsolatedConfigDir(t)
+		path, err := config.FilePath()
+		if err != nil {
+			t.Fatalf("FilePath() error = %v", err)
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll: %v", err)
+		}
+		if err := os.WriteFile(path, []byte(tc.toml), 0o644); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+		if cfg.Editor.AttentionOnBell != tc.want {
+			t.Errorf("%q: AttentionOnBell = %v, want %v", tc.toml, cfg.Editor.AttentionOnBell, tc.want)
+		}
+	}
+}
+
 // TestAltIsMetaConfig covers the tri-state of alt_is_meta: absent means the
 // default (true), and an explicit value is honoured either way.
 //

@@ -404,3 +404,48 @@ func TestRepeatedQuitSparesSaveChangesPrompt(t *testing.T) {
 		t.Fatalf("nvim did not exit within %s of answering the prompt", drainTimeout)
 	}
 }
+
+// TestTerminalBellReachesUIState checks a BEL printed in a :terminal buffer
+// arrives as a bell event once 'belloff' lets terminal bells through, and
+// not while it is "all", Nvim's default (Nvim 0.11+ only). nvim_open_term feeds the terminal
+// directly, so no shell is involved and this runs the same on every OS.
+func TestTerminalBellReachesUIState(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "bell.txt")
+	if err := os.WriteFile(file, []byte("bell\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	proc := spawnIsolated(t, file, 40, 10)
+	s := uistate.New()
+	waitForLine(t, proc, s, "bell")
+
+	ring := func(belloff, marker string) {
+		t.Helper()
+		if err := proc.Nvim.Command("set belloff=" + belloff); err != nil {
+			t.Fatalf("set belloff: %v", err)
+		}
+		lua := `local b = vim.api.nvim_create_buf(false, true)
+vim.api.nvim_set_current_buf(b)
+vim.api.nvim_chan_send(vim.api.nvim_open_term(b, {}), "\a" .. ...)`
+		if err := proc.Nvim.ExecLua(lua, nil, marker); err != nil {
+			t.Fatalf("ring: %v", err)
+		}
+		waitForLine(t, proc, s, marker)
+	}
+
+	// Before Nvim 0.11 terminal bells bypassed 'belloff' entirely (Ubuntu's
+	// apt package is still 0.9), so only newer versions can be silenced.
+	var version int
+	if err := proc.Nvim.ExecLua("local v = vim.version() return v.major * 100 + v.minor", &version); err != nil {
+		t.Fatalf("vim.version: %v", err)
+	}
+
+	ring("all", "silenced")
+	if s.TakeBell() && version >= 11 {
+		t.Fatal("bell reached the UI with belloff=all")
+	}
+	ring("error", "rang")
+	if !s.TakeBell() {
+		t.Fatal("terminal bell did not reach the UI with belloff=error")
+	}
+}

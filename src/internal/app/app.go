@@ -116,6 +116,9 @@ type App struct {
 	// URL can be resolved again after every Nvim redraw.
 	hoverRow, hoverCol int
 	hovering           bool
+
+	// attention handles editor.attention_on_bell; see attention.go.
+	attention attention
 }
 
 // Options controls how the editor window starts.
@@ -131,7 +134,7 @@ type Options struct {
 // New creates an App that starts Nvim with the given arguments (may be empty).
 func New(cfg config.Config, nvimArgs []string, options Options) *App {
 	iconColor, numberIcon := startupIcon(os.Environ())
-	return &App{
+	a := &App{
 		cfg:        cfg,
 		nvimArgs:   append([]string(nil), nvimArgs...),
 		options:    options,
@@ -142,6 +145,8 @@ func New(cfg config.Config, nvimArgs []string, options Options) *App {
 		iconColor:  iconColor,
 		numberIcon: numberIcon,
 	}
+	a.attention.enabled = cfg.Editor.AttentionOnBell
+	return a
 }
 
 // Run drives win's event loop until the editor is done. It blocks the
@@ -209,6 +214,7 @@ func (a *App) runWindow(win *gioapp.Window) (bool, error) {
 		switch e := win.Event().(type) {
 		case gioapp.ViewEvent:
 			a.view = e
+			a.attention.setView(e)
 			setWindowIcon(e, a.iconColor)
 			if e.Valid() {
 				// These hooks patch the native window, which has to
@@ -225,6 +231,8 @@ func (a *App) runWindow(win *gioapp.Window) (bool, error) {
 					installAppMenu(a.options.Version)
 				})
 			}
+		case gioapp.ConfigEvent:
+			a.attention.setFocused(e.Config.Focused)
 		case gioapp.DestroyEvent:
 			return a.quit(), e.Err
 		case gioapp.FrameEvent:
@@ -646,6 +654,9 @@ func (a *App) startNvim() {
 	a.installSlotCmd()
 	a.installRowViews()
 	go a.pumpRedraw()
+	if a.attention.enabled {
+		go a.flushBells()
+	}
 }
 
 // pumpRedraw applies every `redraw` batch Nvim sends to the state model and
@@ -657,6 +668,9 @@ func (a *App) pumpRedraw() {
 	for batch := range a.proc.Redraw {
 		if a.state.Apply(batch) {
 			a.invalidate()
+		}
+		if a.state.TakeBell() {
+			a.attention.bell()
 		}
 	}
 	// Nvim exited (e.g. :q, :qa, :wq) — close the Gio window so the

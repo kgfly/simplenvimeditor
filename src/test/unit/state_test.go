@@ -76,6 +76,23 @@ func TestApplyGridClear(t *testing.T) {
 	}
 }
 
+// TestTakeBell checks bell and visual_bell are reported once each.
+func TestTakeBell(t *testing.T) {
+	s := uistate.New()
+	if s.TakeBell() {
+		t.Fatal("TakeBell = true before any bell")
+	}
+	for _, name := range []string{"bell", "visual_bell"} {
+		s.Apply(batch(ev(name), ev("flush")))
+		if !s.TakeBell() {
+			t.Fatalf("TakeBell = false after %s", name)
+		}
+		if s.TakeBell() {
+			t.Fatalf("TakeBell = true twice after one %s", name)
+		}
+	}
+}
+
 func TestApplySetTitle(t *testing.T) {
 	s := uistate.New()
 	// set_title sends [["path/to/file.txt"]]

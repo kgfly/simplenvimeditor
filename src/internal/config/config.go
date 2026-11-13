@@ -50,6 +50,12 @@ type EditorConfig struct {
 	// ScrollbarWidth is the bar's width in points, capped at one cell.
 	// Zero (the default) means two thirds of a cell.
 	ScrollbarWidth float64 `toml:"scrollbar_width"`
+	// AttentionOnBell asks the OS for the user's attention when Nvim rings
+	// the bell (a terminal job printing "\a", for one) while the window is
+	// not focused: the Dock icon bounces and gets a badge on macOS, the
+	// taskbar button flashes on Windows, and the window is marked urgent
+	// on Linux. Off by default.
+	AttentionOnBell bool `toml:"attention_on_bell"`
 }
 
 // NvimConfig controls how the backend Nvim process is located and launched.

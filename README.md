@@ -15,6 +15,13 @@ features.
 - **Easy-to-find windows.** An innotative, color-grouped, numbered Dock and taskbar icons help
   you pick out the right instance when you have many editors open. See
   [Dock and taskbar icon color](#dock-and-taskbar-icon-color).
+- **Know when your AI agent is done.** Run Copilot CLI, Claude Code, or
+  another agent in a `:terminal` and switch to other work. When the agent
+  finishes or needs an answer, the Dock icon keeps bouncing with a badge
+  (macOS), the taskbar button flashes (Windows), or the window is marked
+  urgent (Linux) until you come back. This works through tmux and ssh too, and
+  the included [agent-bell.py](tools/agent-bell/agent-bell.py) hook script
+  works on all three OSes. See [Agent bell setup](docs/agent-bell-setup.md).
 - **Native, cross-platform rendering.** Gio draws the window on macOS, Linux,
   and Windows with GPU acceleration and Nerd Font support.
 - **Accurate editor layout.** Multigrid rendering places splits and floating
@@ -25,7 +32,7 @@ features.
   (macOS) or Ctrl-click (Linux and Windows) visible HTTP and HTTPS links to
   open them in your browser.
 - **Simple configuration.** An optional `config.toml` lets you choose your font
-  and Neovim launch settings, and turn on an optional per-window
+  and Neovim launch settings, or turn on an optional per-window
   [scrollbar](#scrollbar).
 - **More ways to work.** Run a terminal with
   `simplenvim --maximized -- -c term -c startinsert`, or use Neovim's diff mode
@@ -133,6 +140,7 @@ alt_is_meta = true         # send Alt/Option chords to Nvim as <A-...>
 title_prefix = false       # prefix the window title with color + number, e.g. "re1 "
 scrollbar = false          # per-window scrollbar: click to jump, drag to scroll
 scrollbar_width = 0        # scrollbar width in points; 0 = automatic
+attention_on_bell = false  # bounce/flash the Dock/taskbar icon on a bell while unfocused
 
 [nvim]
 command = "nvim"           # path or PATH-resolved name
@@ -180,6 +188,45 @@ character cell, so larger values are capped. When it's left out or set
 to `0`, the bar is two thirds of a cell wide and follows the font size.
 With the default font at size 14 that's 5 px on a standard display and
 11 px on a Retina one.
+
+### `attention_on_bell`
+
+Set `attention_on_bell = true` to have the window ask for attention when
+Neovim rings the bell while the window isn't focused. The typical use is
+an AI coding agent (Copilot CLI, Claude Code, and similar) running in a
+`:terminal`: when the agent finishes a task it rings the terminal bell
+(`\a`), and you see it even if you're working in another app. The default
+is `false`.
+
+| OS | What happens | When it stops |
+|---|---|---|
+| macOS | The Dock icon keeps bouncing and shows a `●` badge | Both stop when you switch to the window |
+| Windows | The taskbar button flashes, then stays highlighted | When the window comes to the foreground |
+| Linux (X11) | The window is marked urgent (taskbar or dock highlight, depending on the desktop) | When you focus the window |
+| Linux (Wayland) | An xdg-activation request; most compositors highlight the window | Compositor-defined, usually when you focus it |
+
+Nothing happens while the window is focused, since you can already see it.
+
+**Neovim must pass terminal bells through.** Neovim's default is
+`belloff=all`, which drops every bell. Remove `term` from it, for
+example in `init.lua`:
+
+```lua
+vim.opt.belloff = "backspace,cursor,complete,copy,ctrlg,error,esc,ex,hangul,lang,mess,showmatch,operator,register,shell,spell,wildmode"
+```
+
+Any non-terminal bell that `belloff` lets through (for example `error`)
+also triggers attention. Neovim older than 0.11 ignores `belloff` for
+terminal bells and always passes them through.
+
+**The program in the terminal must ring the bell.** AI agent CLIs need
+a task-done hook for that. [agent-bell.py](tools/agent-bell/agent-bell.py)
+is a hook script that rings the agent's terminal bell on macOS, Linux,
+and Windows. It also works through tmux and ssh. See
+[Agent bell setup](docs/agent-bell-setup.md) for the full guide:
+installing the script, hooks for Copilot CLI, Claude Code, code-puppy,
+and OpenAI Codex, tmux and ssh, optionally flashing the Neovim tab and tmux
+window that hold the agent, and troubleshooting.
 
 ## Command-line arguments
 

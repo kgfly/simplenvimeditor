@@ -29,6 +29,9 @@ type State struct {
 	modeIdx   int
 	modeInfos []ModeInfo
 	busy      bool
+
+	// bell records a bell or visual_bell event not yet taken by TakeBell.
+	bell bool
 }
 
 // New returns an empty State, ready to receive redraw batches.
@@ -100,6 +103,8 @@ func (s *State) Apply(batch [][]interface{}) bool {
 			s.busy = true
 		case "busy_stop":
 			s.busy = false
+		case "bell", "visual_bell":
+			s.bell = true
 		default:
 			// Unhandled events (popupmenu_*, cmdline_*, tabline_update,
 			// msg_showcmd, ...) are intentionally ignored in
@@ -170,6 +175,15 @@ func (s *State) Snapshot() Snapshot {
 		ModeInfos: append([]ModeInfo(nil), s.modeInfos...),
 		Busy:      s.busy,
 	}
+}
+
+// TakeBell reports whether Nvim has rung the bell since the last call.
+func (s *State) TakeBell() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	rang := s.bell
+	s.bell = false
+	return rang
 }
 
 // GuiFont returns the latest guifont value reported by Nvim.
